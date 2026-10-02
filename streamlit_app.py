@@ -1,12 +1,15 @@
 import streamlit as st
-import psutil
+import requests
 import pandas as pd
 import plotly.express as px
+from urllib.parse import urlparse
+import socket
+import ssl
 
 # Configuración de la página
-st.set_page_config(page_title="Diagnóstico de Hardware Local", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CyberSec Web Vulnerability Scanner", page_icon="🛡️", layout="wide", initial_sidebar_state="collapsed")
 
-# Estilo visual Cyber/Matrix
+# Estilo visual Cyber / SOC Dark Mode
 st.markdown("""
 <style>
     [data-testid="stSidebar"], [data-testid="collapsedControl"] {
@@ -17,10 +20,15 @@ st.markdown("""
         color: #e2e8f0;
     }
     div.stButton > button, div[data-testid="metric-container"] {
-        background-color: rgba(11, 15, 25, 0.90) !important;
+        background-color: rgba(11, 15, 25, 0.95) !important;
         border: 1px solid #0284c7 !important;
         color: #38bdf8 !important;
         border-radius: 8px;
+    }
+    div.stTextInput input {
+        background-color: #0b0f19;
+        color: #38bdf8;
+        border: 1px solid #0284c7;
     }
     h1, h2, h3 {
         color: #38bdf8 !important;
@@ -29,65 +37,94 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ Panel de Diagnóstico de Hardware en Tiempo Real")
-st.markdown("Esta interfaz extrae métricas reales y directas del sistema operativo y los componentes físicos del equipo donde se está ejecutando el script.")
+st.title("🛡️️ CyberSec Web Vulnerability Scanner")
+st.markdown("Plataforma de auditoría ofensiva/defensiva para evaluar la postura de seguridad, cabeceras HTTP y riesgos de exposición de sitios web.")
 
-st.info("💡 **Nota:** Si ejecutas este código en tu PC de forma local, analizará tu computadora. Si se ejecuta en un servidor web en la nube, analizará los recursos de ese servidor.")
+# Barra de entrada de objetivo
+target_url = st.text_input("Introduce el Dominio o URL a Auditar (ej: https://example.com)", "https://google.com")
 
-# --- OBTENCIÓN DE DATOS REALES CON PSUTIL ---
-cpu_percent = psutil.cpu_percent(interval=0.5)
-cpu_count_logical = psutil.cpu_count(logical=True)
-cpu_count_physical = psutil.cpu_count(logical=False)
+if st.button("🚀 Iniciar Escaneo de Vulnerabilidades"):
+    if not target_url.startswith("http"):
+        target_url = "https://" + target_url
 
-ram = psutil.virtual_memory()
-ram_total_gb = round(ram.total / (1024**3), 2)
-ram_used_gb = round(ram.used / (1024**3), 2)
-ram_percent = ram.percent
+    parsed_url = urlparse(target_url)
+    domain = parsed_url.netloc or parsed_url.path
 
-disk = psutil.disk_usage('/')
-disk_total_gb = round(disk.total / (1024**3), 2)
-disk_used_gb = round(disk.used / (1024**3), 2)
-disk_percent = disk.percent
+    with st.spinner(f"Analizando vectores de ataque y cabeceras para: {domain}..."):
+        try:
+            # Realizar petición HTTP para analizar cabeceras
+            response = requests.get(target_url, timeout=5, verify=True)
+            headers = response.headers
+            status_code = response.status_code
+            
+            # Auditoría de Cabeceras de Seguridad Clave
+            security_headers = {
+                "Strict-Transport-Security (HSTS)": "Strict-Transport-Security" in headers,
+                "Content-Security-Policy (CSP)": "Content-Security-Policy" in headers,
+                "X-Frame-Options (Clickjacking)": "X-Frame-Options" in headers,
+                "X-Content-Type-Options": "X-Content-Type-Options" in headers,
+                "X-XSS-Protection": "X-XSS-Protection" in headers,
+            }
+            
+            score_headers = sum(1 for val in security_headers.values() if val)
+            security_score = int((score_headers / len(security_headers)) * 100)
 
-# --- SECCIÓN DE MÉTRICAS PRINCIPALES ---
-st.subheader("💻 Métricas del Sistema Físico")
+            st.success(f"¡Análisis completado con éxito para {domain}!")
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Uso Actual de CPU", f"{cpu_percent}%", f"{cpu_count_physical} Cores / {cpu_count_logical} Hilos")
-col2.metric("Memoria RAM Usada", f"{ram_used_gb} GB / {ram_total_gb} GB", f"{ram_percent}% en uso")
-col3.metric("Almacenamiento Principal (Disco)", f"{disk_used_gb} GB / {disk_total_gb} GB", f"{disk_percent}% en uso")
+            # --- MÉTRICAS GENERALES ---
+            st.subheader("📊 Resumen del Perfil de Riesgo")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Código de Estado HTTP", status_code, "Normal" if status_code == 200 else "Revisar")
+            col2.metric("Índice de Blindaje", f"{security_score}%", "Alto" if security_score > 60 else "Vulnerable")
+            col3.metric("Protocolo de Transporte", parsed_url.scheme.upper(), "Cifrado SSL/TLS" if parsed_url.scheme == "https" else "Inseguro (HTTP)")
+            col4.metric("Cabeceras Evaluadas", f"{score_headers}/{len(security_headers)}", "Protecciones activas")
 
-st.divider()
+            st.divider()
 
-# --- GRÁFICO DE RENDIMIENTO ---
-st.subheader("📊 Distribución y Carga de Recursos")
+            # --- DETALLE DE CABECERAS ---
+            st.subheader("🔍 Auditoría de Cabeceras de Seguridad (HTTP Headers)")
+            
+            header_data = []
+            for header_name, status in security_headers.items():
+                header_data.append({
+                    "Cabecera de Seguridad": header_name,
+                    "Estado": "✅ Implementada" if status else "❌ Ausente (Riesgo)",
+                    "Nivel de Impacto": "Alto" if "HSTS" in header_name or "CSP" in header_name else "Medio"
+                })
+            
+            df_headers = pd.DataFrame(header_data)
+            st.dataframe(df_headers, use_container_width=True)
 
-df_recursos = pd.DataFrame({
-    "Componente": ["CPU (Procesador)", "Memoria RAM", "Almacenamiento (Disco)"],
-    "Porcentaje de Uso (%)": [cpu_percent, ram_percent, disk_percent]
-})
+            st.divider()
 
-fig = px.bar(
-    df_recursos, 
-    x="Componente", 
-    y="Porcentaje de Uso (%)", 
-    text="Porcentaje de Uso (%)",
-    title="Carga de Componentes en Vivo",
-    color="Componente",
-    color_discrete_sequence=['#38bdf8', '#34d399', '#f43f5e']
-)
-fig.update_traces(texttemplate='%{text}%', textposition='outside')
-fig.update_layout(
-    paper_bgcolor="rgba(0,0,0,0)", 
-    plot_bgcolor="rgba(0,0,0,0)", 
-    font_color="#38bdf8",
-    height=420,
-    showlegend=False
-)
-st.plotly_chart(fig, use_container_width=True)
+            # --- GRÁFICO DE DISTRIBUCIÓN DE RIESGOS ---
+            st.subheader("📈 Distribución de Controles de Seguridad")
+            
+            fig_bar = px.bar(
+                df_headers, 
+                x="Cabecera de Seguridad", 
+                y=[100 if "✅" in x else 30 for x in df_headers["Estado"]],
+                color="Estado",
+                title="Puntuación de Controles Activos por Cabecera",
+                color_discrete_map={"✅ Implementada": "#34d399", "❌ Ausente (Riesgo)": "#f43f5e"}
+            )
+            fig_bar.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                font_color="#38bdf8",
+                height=400,
+                yaxis_title="Nivel de Cumplimiento (%)"
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
 
-st.divider()
+            st.divider()
 
-# Botón para refrescar métricas
-if st.button("🔄 Actualizar Diagnóstico en Vivo"):
-    st.rerun()
+            # --- RECOMENDACIONES TÉCNICAS ---
+            st.subheader("🛠️ Recomendaciones de Mitigación")
+            if security_score < 80:
+                st.warning("⚠️ **Alerta SOC:** Se detectaron carencias en las políticas de cabeceras. Se recomienda implementar cabeceras como `Content-Security-Policy` y `Strict-Transport-Security` para mitigar ataques de Cross-Site Scripting (XSS) y Man-in-the-Middle.")
+            else:
+                st.info("💡 **Estado Óptimo:** El sitio cumple con los estándares principales de endurecimiento de cabeceras web.")
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"❌ Error al conectar con el objetivo: No se pudo resolver o acceder a {target_url}. Verifica que la URL sea correcta y esté online.")
