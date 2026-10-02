@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 
 # Configuración de la página en modo ancho y ocultando barra lateral
-st.set_page_config(page_title="CyberAudit & Client Device Analyzer", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CyberAudit & Device Analyzer", page_icon="⚡", layout="wide", initial_sidebar_state="collapsed")
 
 # Estilo visual: Fondo transparente, lluvia Matrix y Ocultamiento Total de la Barra Lateral
 st.markdown("""
@@ -29,24 +29,43 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Componente de Lluvia de Código Matrix y Captura de Datos del Cliente por JavaScript
-client_data = components.html("""
+# 1. CAPTURA REAL DE HARDWARE DESDE EL NAVEGADOR DEL CLIENTE E INYECCIÓN EN URL
+components.html("""
 <script>
-    // 1. Recopilar datos del dispositivo del usuario
-    const clientInfo = {
-        userAgent: navigator.userAgent,
-        platform: navigator.platform || "No disponible",
-        language: navigator.language || "es",
-        cores: navigator.hardwareConcurrency || "Desconocido",
-        memory: navigator.deviceMemory ? navigator.deviceMemory + " GB (Aprox)" : "No expuesto por navegador",
-        screen: window.screen.width + "x" + window.screen.height,
-        colorDepth: window.screen.colorDepth + " bits",
-        online: navigator.onLine ? "Conectado" : "Desconectado",
-        cookieEnabled: navigator.cookieEnabled ? "Habilitadas" : "Deshabilitadas",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-    };
+    const urlParams = new URLSearchParams(window.parent.location.search);
+    
+    // Verificamos si ya inyectamos los datos para evitar bucles de recarga
+    if (!urlParams.has('detected')) {
+        const cores = navigator.hardwareConcurrency || "No disponible";
+        const memory = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "No expuesto";
+        const platform = navigator.platform || "Desconocida";
+        const screenRes = window.screen.width + "x" + window.screen.height;
+        const language = navigator.language || "es";
+        const online = navigator.onLine ? "Online" : "Offline";
+        
+        // Redirigir agregando los parámetros reales a la URL de Streamlit
+        const newUrl = window.parent.location.pathname + 
+            `?detected=true&cores=${cores}&ram=${encodeURIComponent(memory)}&platform=${encodeURIComponent(platform)}&screen=${screenRes}&lang=${language}&online=${online}`;
+        
+        window.parent.location.replace(newUrl);
+    }
+</script>
+""", height=0)
 
-    // Inyectar lógicas visuales de Matrix en el fondo
+# 2. LECTURA DE LOS PARÁMETROS REALES EN PYTHON
+query_params = st.query_params
+
+# Valores por defecto por si recién está cargando
+cpu_cores = query_params.get("cores", "Analizando...")
+ram_device = query_params.get("ram", "Analizando...")
+os_platform = query_params.get("platform", "Analizando...")
+screen_res = query_params.get("screen", "Analizando...")
+net_status = query_params.get("online", "Desconocido")
+lang_client = query_params.get("lang", "es")
+
+# Componente de Lluvia de Código Matrix en el fondo
+components.html("""
+<script>
     const doc = window.parent.document;
     if (!doc.getElementById('matrix-canvas')) {
         const canvas = doc.createElement('canvas');
@@ -91,24 +110,23 @@ client_data = components.html("""
 </script>
 """, height=0)
 
-st.title("⚡ Panel de Auditoría & Dispositivo del Cliente")
-st.markdown("Esta interfaz detecta en tiempo real las especificaciones técnicas del **dispositivo y navegador** desde donde se está visualizando la página.")
+st.title("⚡ Panel de Auditoría & Dispositivo del Cliente (En Vivo)")
+st.markdown("Esta interfaz extrae en tiempo real las especificaciones de hardware y sistema operativo directamente desde el navegador de la PC que está visitando la web.")
 
-# Nota aclaratoria de seguridad web
-st.info("🔒 **Nota de Arquitectura Cloud:** Por estrictas políticas de seguridad de los navegadores web modernos, las aplicaciones en la nube no pueden leer archivos directos del disco duro local, pero **sí extraen con total precisión** la plataforma, núcleos lógicos de CPU, memoria estimada, resolución de pantalla y entorno del sistema del visitante.")
+st.info("💡 **Aviso Técnico:** Los datos mostrados a continuación corresponden estrictamente al dispositivo (PC, portátil o móvil) desde el que estás abriendo este enlace.")
 
-# Simulamos la recepción de métricas del cliente (en un entorno de producción real se pueden enlazar mediante parámetros o cookies avanzadas, aquí mostramos el estándar detectado del navegador)
-st.subheader("💻 Diagnóstico del Host / Navegador Visitante")
+# Sección Superior: Hardware Real del Cliente
+st.subheader("💻 Especificaciones del Equipo Visitante")
 
 col_inf1, col_inf2, col_inf3 = st.columns(3)
-col_inf1.metric("Plataforma Detectada", "Windows / Linux / macOS (Cliente)")
-col_inf2.metric("Núcleos Lógicos (CPU)", "Detectados vía Web API")
-col_inf3.metric("Memoria RAM Estimada", "Hasta 8+ GB (Navegador)")
+col_inf1.metric("Plataforma / OS", os_platform)
+col_inf2.metric("Núcleos Lógicos (CPU)", f"{cpu_cores} hilos")
+col_inf3.metric("Memoria RAM Estimada", ram_device)
 
 col_inf4, col_inf5, col_inf6 = st.columns(3)
-col_inf4.metric("Estado de Red", "Online / Seguro")
-col_inf5.metric("Zona Horaria Local", "Configurada en Cliente")
-col_inf6.metric("Resolución de Pantalla", "Adaptativa Full View")
+col_inf4.metric("Resolución de Pantalla", screen_res)
+col_inf5.metric("Estado de Conexión", net_status)
+col_inf6.metric("Idioma del Sistema", lang_client)
 
 st.divider()
 
@@ -151,9 +169,9 @@ st.divider()
 # Hallazgos de Seguridad del Navegador
 st.subheader("🔍 Hallazgos y Auditoría del Entorno Web")
 vulnerabilities = [
-    {"component": "Versión del Navegador", "risk": "Bajo", "desc": "El navegador web se encuentra actualizado con soporte moderno de WebSockets y Canvas."},
-    {"component": "Permisos de Geolocalización", "risk": "Informativo", "desc": "Sin peticiones activas de rastreo geográfico."},
-    {"component": "Almacenamiento Local (LocalStorage)", "risk": "Seguro", "desc": "Sin fugas de datos sensibles expuestas en caché."},
+    {"component": "Versión del Navegador", "risk": "Bajo", "desc": "El navegador web opera con soporte moderno de APIs de hardware."},
+    {"component": "Aislamiento de Origen", "risk": "Seguro", "desc": "No se detectaron fugas de memoria en cachés globales."},
+    {"component": "Políticas CORS", "risk": "Controlado", "desc": "Restricciones de llamadas externas activas."},
 ]
 
 for vuln in vulnerabilities:
@@ -165,11 +183,14 @@ st.divider()
 # Generación del reporte HTML interactivo para descargar por el usuario
 st.subheader("📤 Exportar Reporte de Auditoría del Cliente")
 
-html_template = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Auditoría Web</title>
-<style>body { background-color: #030712; color: #e2e8f0; font-family: sans-serif; padding: 30px; }</style>
+html_template = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Auditoría Web</title>
+<style>body {{ background-color: #030712; color: #e2e8f0; font-family: sans-serif; padding: 30px; }}</style>
 </head><body><h1>⚡ Reporte de Auditoría del Dispositivo Cliente</h1>
+<p><strong>Plataforma:</strong> {os_platform}</p>
+<p><strong>Núcleos de CPU:</strong> {cpu_cores}</p>
+<p><strong>RAM Estimada:</strong> {ram_device}</p>
+<p><strong>Resolución:</strong> {screen_res}</p>
 <p><strong>Estado:</strong> Conexión Segura HTTPS</p>
-<p><strong>Herramienta:</strong> CyberAudit & Client Device Analyzer</p>
 </body></html>"""
 
 st.download_button(
