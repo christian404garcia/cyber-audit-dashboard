@@ -29,104 +29,62 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 1. CAPTURA REAL DE HARDWARE DESDE EL NAVEGADOR DEL CLIENTE E INYECCIÓN EN URL
+# 1. INYECCIÓN DEL SCRIPT QUE PINTA LOS DATOS REALES DIRECTAMENTE EN EL DOM DEL CLIENTE
 components.html("""
+<div id="device-info" style="color: #38bdf8; font-family: monospace; font-size: 15px; padding: 15px; background: rgba(11, 15, 25, 0.85); border: 1px solid #0284c7; border-radius: 8px; margin-bottom: 20px;">
+    <strong>🔍 Diagnóstico en Vivo del Navegador / Hardware:</strong><br>
+    • <b>Plataforma / OS:</b> <span id="plat">Cargando...</span><br>
+    • <b>Núcleos Lógicos (CPU):</b> <span id="cores">Cargando...</span> hilos<br>
+    • <b>Memoria RAM Estimada:</b> <span id="ram">Cargando...</span><br>
+    • <b>Resolución de Pantalla:</b> <span id="screen">Cargando...</span><br>
+    • <b>Estado de Red:</b> <span id="net">Cargando...</span><br>
+    • <b>Idioma:</b> <span id="lang">Cargando...</span>
+</div>
+
 <script>
-    const urlParams = new URLSearchParams(window.parent.location.search);
+    document.getElementById('plat').innerText = navigator.platform || "No disponible";
+    document.getElementById('cores').innerText = navigator.hardwareConcurrency || "Desconocido";
+    document.getElementById('ram').innerText = navigator.deviceMemory ? navigator.deviceMemory + " GB (Aprox)" : "No expuesto por navegador";
+    document.getElementById('screen').innerText = window.screen.width + "x" + window.screen.height;
+    document.getElementById('net').innerText = navigator.onLine ? "Online (Seguro)" : "Offline";
+    document.getElementById('lang').innerText = navigator.language || "es";
+</script>
+
+<canvas id="matrix-canvas" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: -999;"></canvas>
+<script>
+    const canvas = document.getElementById('matrix-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
     
-    // Verificamos si ya inyectamos los datos para evitar bucles de recarga
-    if (!urlParams.has('detected')) {
-        const cores = navigator.hardwareConcurrency || "No disponible";
-        const memory = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "No expuesto";
-        const platform = navigator.platform || "Desconocida";
-        const screenRes = window.screen.width + "x" + window.screen.height;
-        const language = navigator.language || "es";
-        const online = navigator.onLine ? "Online" : "Offline";
-        
-        // Redirigir agregando los parámetros reales a la URL de Streamlit
-        const newUrl = window.parent.location.pathname + 
-            `?detected=true&cores=${cores}&ram=${encodeURIComponent(memory)}&platform=${encodeURIComponent(platform)}&screen=${screenRes}&lang=${language}&online=${online}`;
-        
-        window.parent.location.replace(newUrl);
-    }
-</script>
-""", height=0)
-
-# 2. LECTURA DE LOS PARÁMETROS REALES EN PYTHON
-query_params = st.query_params
-
-# Valores por defecto por si recién está cargando
-cpu_cores = query_params.get("cores", "Analizando...")
-ram_device = query_params.get("ram", "Analizando...")
-os_platform = query_params.get("platform", "Analizando...")
-screen_res = query_params.get("screen", "Analizando...")
-net_status = query_params.get("online", "Desconocido")
-lang_client = query_params.get("lang", "es")
-
-# Componente de Lluvia de Código Matrix en el fondo
-components.html("""
-<script>
-    const doc = window.parent.document;
-    if (!doc.getElementById('matrix-canvas')) {
-        const canvas = doc.createElement('canvas');
-        canvas.id = 'matrix-canvas';
-        canvas.style.position = 'fixed';
-        canvas.style.top = '0';
-        canvas.style.left = '0';
-        canvas.style.width = '100vw';
-        canvas.style.height = '100vh';
-        canvas.style.pointerEvents = 'none';
-        canvas.style.zIndex = '-999';
-        doc.body.appendChild(canvas);
-        
-        const ctx = canvas.getContext('2d');
-        canvas.width = window.parent.innerWidth;
-        canvas.height = window.parent.innerHeight;
-        
-        const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZアァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
-        const fontSize = 14;
-        const columns = canvas.width / fontSize;
-        const drops = [];
-        for(let i=0; i<columns; i++) drops[i] = 1;
-        
-        function draw() {
-            ctx.fillStyle = 'rgba(3, 7, 18, 0.1)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#38bdf8';
-            ctx.font = fontSize + 'px monospace';
-            for(let i=0; i<drops.length; i++) {
-                const text = chars.charAt(Math.floor(Math.random() * chars.length));
-                ctx.fillText(text, i*fontSize, drops[i]*fontSize);
-                if(drops[i]*fontSize > canvas.height && Math.random() > 0.975) { drops[i] = 0; }
-                drops[i]++;
-            }
+    const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZアァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
+    const fontSize = 14;
+    const columns = canvas.width / fontSize;
+    const drops = [];
+    for(let i=0; i<columns; i++) drops[i] = 1;
+    
+    function draw() {
+        ctx.fillStyle = 'rgba(3, 7, 18, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = fontSize + 'px monospace';
+        for(let i=0; i<drops.length; i++) {
+            const text = chars.charAt(Math.floor(Math.random() * chars.length));
+            ctx.fillText(text, i*fontSize, drops[i]*fontSize);
+            if(drops[i]*fontSize > canvas.height && Math.random() > 0.975) { drops[i] = 0; }
+            drops[i]++;
         }
-        setInterval(draw, 33);
-        window.parent.addEventListener('resize', () => {
-            canvas.width = window.parent.innerWidth;
-            canvas.height = window.parent.innerHeight;
-        });
     }
+    setInterval(draw, 33);
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
 </script>
-""", height=0)
+""", height=220)
 
-st.title("⚡ Panel de Auditoría & Dispositivo del Cliente (En Vivo)")
-st.markdown("Esta interfaz extrae en tiempo real las especificaciones de hardware y sistema operativo directamente desde el navegador de la PC que está visitando la web.")
-
-st.info("💡 **Aviso Técnico:** Los datos mostrados a continuación corresponden estrictamente al dispositivo (PC, portátil o móvil) desde el que estás abriendo este enlace.")
-
-# Sección Superior: Hardware Real del Cliente
-st.subheader("💻 Especificaciones del Equipo Visitante")
-
-col_inf1, col_inf2, col_inf3 = st.columns(3)
-col_inf1.metric("Plataforma / OS", os_platform)
-col_inf2.metric("Núcleos Lógicos (CPU)", f"{cpu_cores} hilos")
-col_inf3.metric("Memoria RAM Estimada", ram_device)
-
-col_inf4, col_inf5, col_inf6 = st.columns(3)
-col_inf4.metric("Resolución de Pantalla", screen_res)
-col_inf5.metric("Estado de Conexión", net_status)
-col_inf6.metric("Idioma del Sistema", lang_client)
+st.title("⚡ Panel de Auditoría & Dispositivo del Cliente")
+st.markdown("La herramienta superior recopila de forma instantánea y en vivo las especificaciones reales de tu navegador y hardware local.")
 
 st.divider()
 
@@ -183,14 +141,11 @@ st.divider()
 # Generación del reporte HTML interactivo para descargar por el usuario
 st.subheader("📤 Exportar Reporte de Auditoría del Cliente")
 
-html_template = f"""<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Auditoría Web</title>
-<style>body {{ background-color: #030712; color: #e2e8f0; font-family: sans-serif; padding: 30px; }}</style>
+html_template = """<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte de Auditoría Web</title>
+<style>body { background-color: #030712; color: #e2e8f0; font-family: sans-serif; padding: 30px; }</style>
 </head><body><h1>⚡ Reporte de Auditoría del Dispositivo Cliente</h1>
-<p><strong>Plataforma:</strong> {os_platform}</p>
-<p><strong>Núcleos de CPU:</strong> {cpu_cores}</p>
-<p><strong>RAM Estimada:</strong> {ram_device}</p>
-<p><strong>Resolución:</strong> {screen_res}</p>
 <p><strong>Estado:</strong> Conexión Segura HTTPS</p>
+<p><strong>Herramienta:</strong> CyberAudit & Client Device Analyzer</p>
 </body></html>"""
 
 st.download_button(
